@@ -41,13 +41,3 @@ Based on the following implementations
 * [PyTorch Tutorial](http://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html)
 * [@spro/practical-pytorch](https://github.com/spro/practical-pytorch)
 * [@AuCson/PyTorch-Batch-Attention-Seq2seq](https://github.com/AuCson/PyTorch-Batch-Attention-Seq2seq)
-
-## Notebooks
-
-1. `utils.py`
-
-   ​
-
-2. `train.py`
-
-3. `model.py`
