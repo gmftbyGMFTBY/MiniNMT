@@ -1,11 +1,24 @@
-import os, math, argparse
-import torch, ipdb
+#!/usr/bin/python
+
+'''
+Training model script
+'''
+
+import os
+import math
+import argparse
+import torch
+import ipdb
+import time
+import random
+
 from torch import optim
-from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
 from torch.nn import functional as F
+
 from model import Encoder, Decoder, Seq2Seq
 from utils import load_dataset
+from vis import Visualizer
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
@@ -39,7 +52,7 @@ def evaluate(model, val_iter, vocab_size, corpus):
     return total_loss / len(val_iter)
 
 
-def train(e, model, optimizer, train_iter, vocab_size, grad_clip, corpus):
+def train(e, model, optimizer, train_iter, vocab_size, grad_clip, corpus, viser, begin):
     # ipdb.set_trace()
     model.train()
     total_loss = 0
@@ -57,6 +70,10 @@ def train(e, model, optimizer, train_iter, vocab_size, grad_clip, corpus):
                                trg[1:].contiguous().view(-1),
                                ignore_index=pad)
 
+        # plot loss
+        t = time.time() - begin
+        viser.plot_loss(t, loss)
+
         loss.backward()
         clip_grad_norm(model.parameters(), grad_clip)
         optimizer.step()
@@ -68,57 +85,10 @@ def train(e, model, optimizer, train_iter, vocab_size, grad_clip, corpus):
                   (b, total_loss, math.exp(total_loss)))
             total_loss = 0
 
-def test_by_human():
-    # test the result from .de to .en
-    args = parse_arguments()
-    hidden_size = 512
-    embed_size = 256
-    assert torch.cuda.is_available()
-
-    print("[!] preparing dataset for test ...")
-    train_iter, val_iter, test_iter, corpus = load_dataset(args.batch_size)
-    zh_size, en_size = corpus.zh_size, corpus.en_size
-
-    # load the model
-    encoder = Encoder(en_size, embed_size, hidden_size, n_layers=2, dropout=0.5)
-    decoder = Decoder(embed_size, hidden_size, zh_size, n_layers=1, dropout=0.5)
-    seq2seq = Seq2Seq(encoder, decoder).cuda()
-    seq2seq.load_state_dict(torch.load('.save/seq2seq_21.pt'))
-
-    # only decoder 1 batch sents
-    for b, batch in enumerate(train_iter):
-        src, len_src = batch.src
-        trg, len_trg = batch.trg
-        src, trg = src.cuda(), trg.cuda()
-        # do not use force teaching, just use the maximum possibility
-        output = seq2seq(src, trg, 0)
-        output = output.transpose(0, 1)    # (B*T*N)
-        src = src.transpose(0, 1)          # (B*T)
-        
-        # src
-        for source, result in zip(src, output):
-            print('German: : ')
-            print('    ', end=' ')
-            for word in source:
-                if DE.vocab.itos[word] in ["<pad>", "<sos>", "<unk>", "<eos>"]:
-                    continue
-                print(DE.vocab.itos[word], end=' ')
-                # print(word, end=' ')
-            print()
-            print('English: ')
-            print('    ', end=' ')
-            for word in result:
-                _, index = word.max(0)
-                if EN.vocab.itos[index] in ["<pad>", "<sos>", "<unk>", "<eos>"]:
-                    continue
-                print(EN.vocab.itos[index], end=' ')
-                # print('test ...', word)
-            print()
-
-        print("[!] End the testing ...")
-        break
 
 def main():
+    begin = time.time()
+    viser = Visualizer()
     args = parse_arguments()
     hidden_size = 512
     embed_size = 256
@@ -140,7 +110,7 @@ def main():
     best_val_loss = None
     for e in range(1, args.epochs+1):
         train(e, seq2seq, optimizer, train_iter,
-              zh_size, args.grad_clip, corpus)
+              zh_size, args.grad_clip, corpus, viser, begin)
         val_loss = evaluate(seq2seq, val_iter, zh_size, corpus)
         print("[Epoch:%d] val_loss:%5.3f | val_pp:%5.2fS"
               % (e, val_loss, math.exp(val_loss)))
@@ -148,17 +118,30 @@ def main():
         # Save the model if the validation loss is the best we've seen so far.
         if not best_val_loss or val_loss < best_val_loss:
             print("[!] best model occur, saving model...")
+
+            # If find the new best model, try to plot text
             if not os.path.isdir(".save"):
                 os.makedirs(".save")
             torch.save(seq2seq.state_dict(), '.save/seq2seq_%d.pt' % (e))
             best_val_loss = val_loss
+
+            # plot text from the test dataset
+            # only plot 1 sentences
+            test_batch = random.choice(test_iter)
+            src = test_batch.get_src()[0].cuda()
+            trg = test_batch.get_target()[0].cuda()
+            pre = seq2seq.eval_forward(src, trg)
+            src_sent = ' '.join([corpus.en_itos[word] for word in src])
+            trg_sent = ' '.join([corpus.zh_itos[word] for word in trg])
+            pre_sent = ' '.join([corpus.zh_itos[word] for word in pre])
+            viser.plot_text(src_sent, pre_sent, trg_sent)
 
     test_loss = evaluate(seq2seq, test_iter, zh_size, corpus)
     print("[TEST] Final loss:%5.2f" % test_loss)
 
 if __name__ == "__main__":
     try:
-        # main()
-        test_by_human()
+        main()
     except KeyboardInterrupt as e:
         print("[STOP]", e)
+        ipdb.set_trace()    # debug model

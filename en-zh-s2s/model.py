@@ -121,5 +121,24 @@ class Seq2Seq(nn.Module):
             output = for_output.cuda()
         return outputs
 
+    def eval_forward(self, src, max_len, sos):
+        # src: [T, 1, N]
+        batch_size = src.size(0)
+        vocab_size = self.decoder.output_size
+        container = []
+
+        encoder_output, hidden = self.encoder(src)
+        hidden = hidden[:self.decoder.n_layers]
+        output = torch.Tensor(batch_size).fill_(sos)
+        for t in range(1, max_len):
+            output, hidden, attn_weights = self.decoder(
+                output, hidden, encoder_output
+            )
+            # do not use the teacher force
+            output = output.data.max(1)[1].cuda()
+            container.append(output)
+
+        return container    # [T]
+
 if __name__ == "__main__":
     pass

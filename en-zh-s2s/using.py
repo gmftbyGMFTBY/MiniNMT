@@ -47,9 +47,11 @@ def cli(sentence):
     inpt = torch.Tensor([corpus.en_stoi[word] for word in sentence.split()])
     inpt = inpt.unsqueeze(0).cuda()    # [1, T] / [B, T]
 
-    pass
+    # model output
+    out = seq2seq.eval_forward(inpt)
 
-
+    # decode the out into the chinese sentence
+    print(' '.join([corpus.zh_itos[word] for word in out]))
 
 if __name__ == "__main__":
     pass
