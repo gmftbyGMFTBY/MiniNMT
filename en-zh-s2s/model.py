@@ -1,7 +1,10 @@
 #!/usr/bin/python3
 
 
-import math, torch, random
+import math
+import torch
+import random
+import ipdb
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -51,7 +54,7 @@ class Attention(nn.Module):
 
     def score(self, hidden, encoder_outputs):
         # [B*T*2H]->[B*T*H]
-        energy = F.tanh(self.attn(torch.cat([hidden, encoder_outputs], 2)))
+        energy = torch.tanh(self.attn(torch.cat([hidden, encoder_outputs], 2)))
         energy = energy.transpose(1, 2)  # [B*H*T]
         v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)  # [B*1*H]
         energy = torch.bmm(v, energy)  # [B*1*T]
@@ -122,14 +125,16 @@ class Seq2Seq(nn.Module):
         return outputs
 
     def eval_forward(self, src, max_len, sos):
-        # src: [T, 1, N]
-        batch_size = src.size(0)
-        vocab_size = self.decoder.output_size
+        # src: [1, T]
+        batch_size = src.size(0)    # 1
+        vocab_size = self.decoder.output_size    # N
         container = []
+
+        src = src.transpose(0, 1)
 
         encoder_output, hidden = self.encoder(src)
         hidden = hidden[:self.decoder.n_layers]
-        output = torch.Tensor(batch_size).fill_(sos)
+        output = torch.LongTensor(batch_size).fill_(sos).cuda()
         for t in range(1, max_len):
             output, hidden, attn_weights = self.decoder(
                 output, hidden, encoder_output

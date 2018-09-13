@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 
 
-import jieba, random
+import random
 import torch
 import torch.nn as nn
+import ipdb
 
 class Corpus:
     '''load all the data from the corpus 
@@ -16,9 +17,9 @@ class Corpus:
             {'src': [], 'target': []}, \
             {'src': [], 'target': []}
         
-        self.load_data(path + 'test', self.test)
-        self.load_data(path + 'train', self.train)
-        self.load_data(path + 'val', self.val)
+        # self.load_data(path + 'test', self.test)
+        self.load_data(path + 'cmn', self.train)
+        # self.load_data(path + 'val', self.val)
         print('[!] load dataset over')
 
         # load the word bag
@@ -42,20 +43,24 @@ class Corpus:
         
         def _helper_zh(sentence):
             unk = self.zh_stoi['<unk>']
-            return [self.zh_stoi.get(word.strip(), unk) for word in jieba.cut(sentence) if word.strip()]
+            ready = [self.zh_stoi.get(word.strip(), unk) for word in list(sentence) if word.strip()] + [self.zh_stoi['<eos>']]
+            ready[0: 0] = [self.zh_stoi['<sos>']]
+            return ready
 
         def _helper_en(sentence):
             unk = self.en_stoi['<unk>']
-            return [self.en_stoi.get(word.strip(), unk) for word in sentence.split() if word.strip()]
+            ready = [self.en_stoi.get(word.strip(), unk) for word in sentence.split() if word.strip()] + [self.en_stoi['<eos>']]
+            ready[0: 0] = [self.en_stoi['<sos>']]
+            return ready
 
-        for example in self.test['src']:
-            self.idx_test['src'].append(_helper_en(example))
-        for example in self.test['target']:
-            self.idx_test['target'].append(_helper_zh(example))
-        for example in self.val['src']:
-            self.idx_val['src'].append(_helper_en(example))
-        for example in self.val['target']:
-            self.idx_val['target'].append(_helper_zh(example))
+        # for example in self.test['src']:
+        #     self.idx_test['src'].append(_helper_en(example))
+        # for example in self.test['target']:
+        #     self.idx_test['target'].append(_helper_zh(example))
+        # for example in self.val['src']:
+        #     self.idx_val['src'].append(_helper_en(example))
+        # for example in self.val['target']:
+        #     self.idx_val['target'].append(_helper_zh(example))
         for example in self.train['src']:
             self.idx_train['src'].append(_helper_en(example))
         for example in self.train['target']:
@@ -90,7 +95,8 @@ class Corpus:
 
         for sent in self.train['target']:
             # use jieba to cut
-            for word in jieba.cut(sent):
+            # for word in jieba.cut(sent):
+            for word in list(sent):
                 if word.strip():
                     if word not in self.zh_stoi:
                         self.zh_size += 1
@@ -133,11 +139,11 @@ class Batch:
     def get_src(self):
         # return batch tensor [seq, batch]
         # do not need to assert the CUDA
-        return torch.Tensor(self.src).transpose(0, 1)
+        return torch.LongTensor(self.src).transpose(0, 1)
 
     def get_target(self):
         # return batch tensor [seq, bacth]
-        return torch.Tensor(self.target).transpose(0, 1)
+        return torch.LongTensor(self.target).transpose(0, 1)
 
 def load_dataset(batch_size=16, shuffle=True):
     # iter is the list of the batch class's instance
@@ -150,7 +156,7 @@ def load_dataset(batch_size=16, shuffle=True):
         while begin < len(data['src']):
             data_iter.append(Batch(data['src'][begin: begin + batch_size], \
                     data['target'][begin: begin + batch_size], unk))
-            begin += 16
+            begin += batch_size
         return data_iter
 
     train_iter, test_iter, val_iter = _helper(corpus.idx_train), _helper(corpus.idx_test), _helper(corpus.idx_val)
@@ -167,6 +173,7 @@ def load_dataset(batch_size=16, shuffle=True):
 if __name__ == "__main__":
     # test process
     train_iter, test_iter, val_iter, corpus = load_dataset()
+    ipdb.set_trace()
     test_batch = train_iter[1]
     src = test_batch.get_src()
     target = test_batch.get_target()
